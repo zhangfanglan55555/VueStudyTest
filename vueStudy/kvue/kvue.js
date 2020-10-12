@@ -8,6 +8,7 @@ class KVue {
     constructor(options) {
         this.$options = options; //接收参数
         this.$data = options.data;
+        this.$methods = options.methods
         // 数据响应式处理
         observe(this.$data)
 
@@ -20,6 +21,21 @@ class KVue {
     }
 }
 
+function proxy(vm) {
+    Object.keys(vm.$data).forEach(key => {
+        Object.defineProperty(vm, key, {
+            get() {
+                return vm.$data[key]
+            },
+            set(v) {
+                vm.$data[key] = v;
+            }
+        })
+    })
+
+
+
+}
 function defineReact(obj, key, val) {
     observe(val)
 
@@ -49,32 +65,20 @@ function observe(obj) {
 // 根据传入value的类型做相应的响应式处理
 class Observer {
     constructor(value) {
-            this.value = value;
-            if (Array.isArray(value)) {
+        this.value = value;
+        if (Array.isArray(value)) {
 
-            } else {
-                // 对象
-                this.walk(value)
-            }
+        } else {
+            // 对象
+            this.walk(value)
         }
-        // 对象响应式处理
+    }
+    // 对象响应式处理
     walk(obj) {
         Object.keys(obj).forEach(key => defineReact(obj, key, obj[key]))
     }
 }
 
-function proxy(vm) {
-    Object.keys(vm.$data).forEach(key => {
-        Object.defineProperty(vm, key, {
-            get() {
-                return vm.$data[key]
-            },
-            set(v) {
-                vm.$data[key] = v;
-            }
-        })
-    })
-}
 //  解析模板
 /**
  * 1.处理插值
@@ -85,6 +89,7 @@ class Compile {
     constructor(el, vm) {
         this.$vm = vm;
         this.$el = document.querySelector(el);
+        this.$methods = vm.$methods
         if (this.$el) {
             this.compile(this.$el)
         }
@@ -109,7 +114,8 @@ class Compile {
                     }
                     if (/\@.?/.test(attrName)) {
                         const dir = attrName.substring(1);
-
+                        // dir : click exp : clickFn
+                        this[dir] && this[dir](node, exp)
                     }
                 })
             } else if (this.isInter(node)) {
@@ -127,12 +133,26 @@ class Compile {
         // 1.初始化
         const fn = this[dir + 'Updater']
         fn && fn(node, this.$vm[exp])
-            // 2.更新
-        new Watcher(this.$vm, exp, function(val) {
+        // 2.更新
+        new Watcher(this.$vm, exp, function (val) {
             fn && fn(node, val)
         })
     }
-
+    model(node, exp) {
+        this.update(node, exp, 'model')
+        this.input(node, exp)
+    }
+    input(node, exp) {
+        node.oninput = function (e) {
+            this.$vm[exp] = e.target.value
+        }.bind(this)
+    }
+    modelUpdater(node, value) {
+        node.value = value
+    }
+    click(node, fn) {
+        node.onclick = this.$methods[fn].bind(this.$vm)
+    }
     text(node, exp) {
         this.update(node, exp, 'text')
     }
